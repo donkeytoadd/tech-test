@@ -19,6 +19,7 @@ namespace Order.Service.Tests
         private DbConnection _connection;
 
         private readonly byte[] _orderStatusCreatedId = Guid.NewGuid().ToByteArray();
+        private readonly byte[] _orderStatusFailedId = Guid.NewGuid().ToByteArray();
         private readonly byte[] _orderServiceEmailId = Guid.NewGuid().ToByteArray();
         private readonly byte[] _orderProductEmailId = Guid.NewGuid().ToByteArray();
 
@@ -112,6 +113,38 @@ namespace Order.Service.Tests
         }
 
         [Test]
+        public async Task GetOrdersByStatusAsync_ReturnsOnlyOrdersWithCorrectStatus()
+        {
+            //Arrange
+            var orderId1 = Guid.NewGuid();
+            await AddOrder(orderId1, 1);
+            
+            var failedOrderId = Guid.NewGuid();
+            await AddOrderWithStatus(failedOrderId, 1, _orderStatusFailedId, DateTime.Now);
+
+            //Act
+            var orders = await _orderService.GetOrdersByStatusAsync("Failed");
+            
+            //Assert
+            Assert.AreEqual(1, orders.Count());
+            Assert.AreEqual(failedOrderId, orders.Single().Id);
+        }
+
+        [Test]
+        public async Task GetOrdersByStatusAsync_IsCaseInsensitive()
+        {
+            // Arrange
+            var failedOrderId = Guid.NewGuid();
+            await AddOrderWithStatus(failedOrderId, 1, _orderStatusFailedId, DateTime.Now);
+
+            // Act
+            var orders = await _orderService.GetOrdersByStatusAsync("failed");
+
+            // Assert
+            Assert.AreEqual(1, orders.Count());
+        }
+
+        [Test]
         public async Task GetOrderByIdAsync_ReturnsCorrectOrder()
         {
             // Arrange
@@ -177,6 +210,30 @@ namespace Order.Service.Tests
 
             await _orderContext.SaveChangesAsync();
         }
+        
+        private async Task AddOrderWithStatus(Guid orderId, int quantity, byte[] statusId, DateTime createdDate)
+        {
+            var orderIdBytes = orderId.ToByteArray();
+            _orderContext.Order.Add(new Data.Entities.Order
+            {
+                Id = orderIdBytes,
+                ResellerId = Guid.NewGuid().ToByteArray(),
+                CustomerId = Guid.NewGuid().ToByteArray(),
+                CreatedDate = createdDate,
+                StatusId = statusId,
+            });
+
+            _orderContext.OrderItem.Add(new OrderItem
+            {
+                Id = Guid.NewGuid().ToByteArray(),
+                OrderId = orderIdBytes,
+                ServiceId = _orderServiceEmailId,
+                ProductId = _orderProductEmailId,
+                Quantity = quantity
+            });
+
+            await _orderContext.SaveChangesAsync();
+        }
 
         private async Task AddReferenceDataAsync(OrderContext orderContext)
         {
@@ -184,6 +241,12 @@ namespace Order.Service.Tests
             {
                 Id = _orderStatusCreatedId,
                 Name = "Created",
+            });
+
+            orderContext.OrderStatus.Add(new OrderStatus
+            {
+                Id = _orderStatusFailedId,
+                Name = "Failed",
             });
 
             orderContext.OrderService.Add(new Data.Entities.OrderService

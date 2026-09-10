@@ -7,6 +7,9 @@ using System.Threading.Tasks;
 
 namespace Order.Data
 {
+    using System.Linq.Expressions;
+    using Entities;
+
     public class OrderRepository : IOrderRepository
     {
         private readonly OrderContext _orderContext;
@@ -15,24 +18,42 @@ namespace Order.Data
         {
             _orderContext = orderContext;
         }
+        
+        //abstracted select logic to an expression rather than duplicating select statement in GetOrdersByStatusAsync
+        private static readonly Expression<Func<Entities.Order, OrderSummary>> OrderSummarySelector = x => new OrderSummary
+        {
+            Id = new Guid(x.Id),
+            ResellerId = new Guid(x.ResellerId),
+            CustomerId = new Guid(x.CustomerId),
+            StatusId = new Guid(x.StatusId),
+            StatusName = x.Status.Name,
+            ItemCount = x.Items.Count,
+            TotalCost = x.Items.Sum(i => i.Quantity * i.Product.UnitCost).Value,
+            TotalPrice = x.Items.Sum(i => i.Quantity * i.Product.UnitPrice).Value,
+            CreatedDate = x.CreatedDate
+        };
 
         public async Task<IEnumerable<OrderSummary>> GetOrdersAsync()
         {
             var orders = await _orderContext.Order
                 .Include(x => x.Items)
                 .Include(x => x.Status)
-                .Select(x => new OrderSummary
-                {
-                    Id = new Guid(x.Id),
-                    ResellerId = new Guid(x.ResellerId),
-                    CustomerId = new Guid(x.CustomerId),
-                    StatusId = new Guid(x.StatusId),
-                    StatusName = x.Status.Name,
-                    ItemCount = x.Items.Count,
-                    TotalCost = x.Items.Sum(i => i.Quantity * i.Product.UnitCost).Value,
-                    TotalPrice = x.Items.Sum(i => i.Quantity * i.Product.UnitPrice).Value,
-                    CreatedDate = x.CreatedDate
-                })
+                .Select(OrderSummarySelector)
+                .OrderByDescending(x => x.CreatedDate)
+                .ToListAsync();
+
+            return orders;
+        }
+        
+        public async Task<IEnumerable<OrderSummary>> GetOrdersByStatusAsync(string statusName)
+        {
+            var normalisedStatus = statusName.Trim().ToLower();
+
+            var orders = await _orderContext.Order
+                .Include(x => x.Items)
+                .Include(x => x.Status)
+                .Where(x => x.Status.Name.ToLower() == normalisedStatus)
+                .Select(OrderSummarySelector)
                 .OrderByDescending(x => x.CreatedDate)
                 .ToListAsync();
 

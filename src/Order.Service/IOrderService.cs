@@ -8,6 +8,8 @@ namespace Order.Service
     public interface IOrderService
     {
         Task<IEnumerable<OrderSummary>> GetOrdersAsync();
+
+        Task<IEnumerable<OrderSummary>> GetOrdersByStatusAsync(string statusName);
         
         Task<OrderDetail> GetOrderByIdAsync(Guid orderId);
     }

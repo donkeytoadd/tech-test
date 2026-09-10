@@ -25,6 +25,14 @@ namespace OrderService.WebAPI.Controllers
             return Ok(orders);
         }
 
+        [HttpGet("status/{statusName}")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetOrdersByStatusAsync(string statusName)
+        {
+            var orders = await _orderService.GetOrdersByStatusAsync(statusName);
+            return Ok(orders);
+        }
+
         [HttpGet("{orderId}")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
