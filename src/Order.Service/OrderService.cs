@@ -59,5 +59,11 @@ namespace Order.Service
             var result = await _orderRepository.CreateOrderAsync(request);
             return result;
         }
+
+        public async Task<IEnumerable<MonthlyProfit>> GetMonthlyProfitForCompletedOrdersAsync()
+        {
+            var profit = await _orderRepository.GetMonthlyProfitForCompletedOrdersAsync();
+            return profit;
+        }
     }
 }

@@ -96,5 +96,13 @@ namespace OrderService.WebAPI.Controllers
 
             return Ok(result);
         }
+
+        [HttpGet("profit/monthly")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetMonthlyProfitForCompletedOrdersAsync()
+        {
+            var profit = await _orderService.GetMonthlyProfitForCompletedOrdersAsync();
+            return Ok(profit);
+        }
     }
 }

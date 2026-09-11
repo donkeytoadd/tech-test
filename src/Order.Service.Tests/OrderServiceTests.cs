@@ -26,6 +26,7 @@ namespace Order.Service.Tests
         private readonly byte[] _orderStatusCreatedId = Guid.NewGuid().ToByteArray();
         private readonly byte[] _orderStatusFailedId = Guid.NewGuid().ToByteArray();
         private readonly byte[] _orderStatusInProgressId = Guid.NewGuid().ToByteArray();
+        private readonly byte[] _orderStatusCompletedId = Guid.NewGuid().ToByteArray();
         private readonly byte[] _orderServiceEmailId = Guid.NewGuid().ToByteArray();
         private readonly byte[] _orderProductEmailId = Guid.NewGuid().ToByteArray();
 
@@ -309,6 +310,82 @@ namespace Order.Service.Tests
             Assert.AreEqual(0, orders.Count());
         }
 
+        [Test]
+        public async Task GetMonthlyProfitForCompletedOrdersAsync_ReturnsEmptyList_WhenNoCompletedOrdersExist()
+        {
+            // Arrange
+            await AddOrderWithStatus(Guid.NewGuid(), 1, _orderStatusCreatedId, new DateTime(2026, 9, 11));
+
+            // Act
+            var monthlyProfits = await _orderService.GetMonthlyProfitForCompletedOrdersAsync();
+
+            // Assert
+            Assert.AreEqual(0, monthlyProfits.Count());
+        }
+
+        [Test]
+        public async Task GetMonthlyProfitForCompletedOrdersAsync_ReturnsProfitForSingleCompletedOrder()
+        {
+            // Arrange
+            await AddOrderWithStatus(Guid.NewGuid(), 1, _orderStatusCompletedId, new DateTime(2026, 9, 11));
+
+            // Act
+            var monthlyProfits = await _orderService.GetMonthlyProfitForCompletedOrdersAsync();
+
+            // Assert
+            var monthlyProfit = monthlyProfits.Single();
+            Assert.AreEqual(2026, monthlyProfit.Year);
+            Assert.AreEqual(9, monthlyProfit.Month);
+            Assert.AreEqual(0.8m, monthlyProfit.TotalCost);
+            Assert.AreEqual(0.9m, monthlyProfit.TotalPrice);
+            Assert.AreEqual(0.1m, monthlyProfit.Profit);
+        }
+
+        [Test]
+        public async Task GetMonthlyProfitForCompletedOrdersAsync_ReturnsProfitForMultipleCompletedOrders()
+        {
+            // Arrange
+            await AddOrderWithStatus(Guid.NewGuid(), 1, _orderStatusCompletedId, new DateTime(2026, 9, 5));
+            await AddOrderWithStatus(Guid.NewGuid(), 2, _orderStatusCompletedId, new DateTime(2026, 9, 20));
+            await AddOrderWithStatus(Guid.NewGuid(), 5, _orderStatusCompletedId, new DateTime(2026, 8, 15));
+
+            // Act
+            var monthlyProfits = (await _orderService.GetMonthlyProfitForCompletedOrdersAsync()).ToList();
+
+            // Assert
+            Assert.AreEqual(2, monthlyProfits.Count);
+
+            var august = monthlyProfits[0];
+            Assert.AreEqual(2026, august.Year);
+            Assert.AreEqual(8, august.Month);
+            Assert.AreEqual(4.0m, august.TotalCost);
+            Assert.AreEqual(4.5m, august.TotalPrice);
+            Assert.AreEqual(0.5m, august.Profit);
+
+            var september = monthlyProfits[1];
+            Assert.AreEqual(2026, september.Year);
+            Assert.AreEqual(9, september.Month);
+            Assert.AreEqual(2.4m, september.TotalCost);
+            Assert.AreEqual(2.7m, september.TotalPrice);
+            Assert.AreEqual(0.3m, september.Profit);
+        }
+
+        [Test]
+        public async Task GetMonthlyProfitForCompletedOrdersAsync_ExcludesOrdersWithOtherStatuses()
+        {
+            // Arrange
+            await AddOrderWithStatus(Guid.NewGuid(), 1, _orderStatusCompletedId, new DateTime(2026, 9, 10));
+            await AddOrderWithStatus(Guid.NewGuid(), 5, _orderStatusFailedId, new DateTime(2026, 9, 11));
+
+            // Act
+            var monthlyProfits = await _orderService.GetMonthlyProfitForCompletedOrdersAsync();
+
+            // Assert
+            var monthlyProfit = monthlyProfits.Single();
+            Assert.AreEqual(0.8m, monthlyProfit.TotalCost);
+            Assert.AreEqual(0.9m, monthlyProfit.TotalPrice);
+        }
+
         private CreateOrderRequest CreateValidCreateOrderRequest()
         {
             return new CreateOrderRequest
@@ -392,6 +469,12 @@ namespace Order.Service.Tests
             {
                 Id = _orderStatusInProgressId,
                 Name = "In Progress",
+            });
+
+            orderContext.OrderStatus.Add(new OrderStatus
+            {
+                Id = _orderStatusCompletedId,
+                Name = "Completed",
             });
 
             orderContext.OrderService.Add(new Data.Entities.OrderService

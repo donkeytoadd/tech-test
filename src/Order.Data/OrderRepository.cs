@@ -13,6 +13,7 @@ namespace Order.Data
     public class OrderRepository : IOrderRepository
     {
         private const string CreatedStatus = "Created";
+        private const string CompletedStatus = "Completed";
         
         private readonly OrderContext _orderContext;
 
@@ -212,6 +213,41 @@ namespace Order.Data
             return await _orderContext.OrderStatus
                 .Where(x => x.Name.ToLower() == normalizedStatus)
                 .SingleOrDefaultAsync();
+        }
+
+        public async Task<IEnumerable<MonthlyProfit>> GetMonthlyProfitForCompletedOrdersAsync()
+        {
+            var completedOrders = await GetOrdersByStatusAsync(CompletedStatus);
+
+            var monthlyProfits = new List<MonthlyProfit>();
+
+            foreach (var order in completedOrders)
+            {
+                var year = order.CreatedDate.Year;
+                var month = order.CreatedDate.Month;
+
+                var monthlyProfit = monthlyProfits.FirstOrDefault(x => x.Year == year && x.Month == month);
+
+                if (monthlyProfit == null)
+                {
+                    monthlyProfit = new MonthlyProfit
+                    {
+                        Year = year,
+                        Month = month
+                    };
+
+                    monthlyProfits.Add(monthlyProfit);
+                }
+
+                monthlyProfit.TotalCost += order.TotalCost;
+                monthlyProfit.TotalPrice += order.TotalPrice;
+                monthlyProfit.Profit = monthlyProfit.TotalPrice - monthlyProfit.TotalCost;
+            }
+
+            return monthlyProfits
+                .OrderBy(x => x.Year)
+                .ThenBy(x => x.Month)
+                .ToList();
         }
     }
 }
