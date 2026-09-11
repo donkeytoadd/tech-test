@@ -1,7 +1,9 @@
-﻿using Order.Data;
+using FluentValidation;
+using Order.Data;
 using Order.Model;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace Order.Service
@@ -9,10 +11,12 @@ namespace Order.Service
     public class OrderService : IOrderService
     {
         private readonly IOrderRepository _orderRepository;
+        private readonly IValidator<CreateOrderRequest> _createOrderRequestValidator;
 
-        public OrderService(IOrderRepository orderRepository)
+        public OrderService(IOrderRepository orderRepository, IValidator<CreateOrderRequest> createOrderRequestValidator)
         {
             _orderRepository = orderRepository;
+            _createOrderRequestValidator = createOrderRequestValidator;
         }
 
         public async Task<IEnumerable<OrderSummary>> GetOrdersAsync()
@@ -36,6 +40,23 @@ namespace Order.Service
         public async Task<UpdateOrderStatusResult> UpdateOrderStatusAsync(Guid orderId, string statusName)
         {
             var result = await _orderRepository.UpdateOrderStatusAsync(orderId, statusName);
+            return result;
+        }
+
+        public async Task<CreateOrderResult> CreateOrderAsync(CreateOrderRequest request)
+        {
+            var validationResult = await _createOrderRequestValidator.ValidateAsync(request);
+
+            if (!validationResult.IsValid)
+            {
+                return new CreateOrderResult
+                {
+                    Success = false,
+                    Errors = validationResult.Errors.Select(x => $"{x.PropertyName} {x.ErrorMessage}").ToList()
+                };
+            }
+
+            var result = await _orderRepository.CreateOrderAsync(request);
             return result;
         }
     }

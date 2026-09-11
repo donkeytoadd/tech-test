@@ -76,5 +76,25 @@ namespace OrderService.WebAPI.Controllers
                     return BadRequest();
             }
         }
+        
+        [HttpPost]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public async Task<IActionResult> CreateOrder([FromBody] CreateOrderRequest request)
+        {
+            if (request == null)
+            {
+                return BadRequest("A request body is required.");
+            }
+
+            var result = await _orderService.CreateOrderAsync(request);
+
+            if (!result.Success)
+            {
+                return BadRequest(result.Errors);
+            }
+
+            return Ok(result);
+        }
     }
 }

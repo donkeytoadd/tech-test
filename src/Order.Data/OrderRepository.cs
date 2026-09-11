@@ -12,6 +12,8 @@ namespace Order.Data
 
     public class OrderRepository : IOrderRepository
     {
+        private const string CreatedStatus = "Created";
+        
         private readonly OrderContext _orderContext;
 
         public OrderRepository(OrderContext orderContext)
@@ -20,7 +22,7 @@ namespace Order.Data
         }
         
         //abstracted select logic to an expression rather than duplicating select statement in GetOrdersByStatusAsync
-        private static readonly Expression<Func<Entities.Order, OrderSummary>> OrderSummarySelector = x => new OrderSummary
+        private static readonly Expression<Func<Order, OrderSummary>> OrderSummarySelector = x => new OrderSummary
         {
             Id = new Guid(x.Id),
             ResellerId = new Guid(x.ResellerId),
@@ -108,11 +110,7 @@ namespace Order.Data
                 return new UpdateOrderStatusResult { Outcome = UpdateOrderStatusOutcome.OrderNotFound };
             }
 
-            var normalizedStatus = statusName.Trim().ToLowerInvariant();
-
-            var status = await _orderContext.OrderStatus
-                .Where(x => x.Name.ToLower() == normalizedStatus)
-                .SingleOrDefaultAsync();
+            var status = await GetStatusByNameAsync(statusName);
 
             if (status == null)
             {
@@ -123,6 +121,97 @@ namespace Order.Data
             await _orderContext.SaveChangesAsync();
 
             return new UpdateOrderStatusResult { Outcome = UpdateOrderStatusOutcome.Success };
+        }
+
+        public async Task<CreateOrderResult> CreateOrderAsync(CreateOrderRequest request)
+        {
+            var errors = new List<string>();
+            var orderItems = new List<OrderItem>();
+
+            foreach (var item in request.Items)
+            {
+                var productIdBytes = item.ProductId.ToByteArray();
+                var product = await _orderContext.OrderProduct
+                    .Where(x => _orderContext.IsInMemoryDatabase()
+                        ? x.Id.SequenceEqual(productIdBytes)
+                        : x.Id == productIdBytes)
+                    .Include(orderProduct => orderProduct.Service)
+                    .SingleOrDefaultAsync();
+
+                if (product == null)
+                {
+                    errors.Add($"Product {item.ProductId} not found");
+                    continue;
+                }
+                
+                orderItems.Add(new OrderItem
+                {
+                    Id = Guid.NewGuid().ToByteArray(),
+                    ProductId = product.Id,
+                    ServiceId = product.Service.Id,
+                    Quantity = item.Quantity
+                });
+            }
+
+            if (errors.Any())
+            {
+                return new CreateOrderResult()
+                {
+                    Success = false,
+                    Errors = errors
+                };
+            }
+
+            var status = await GetStatusByNameAsync(CreatedStatus);
+
+            if (status == null)
+            {
+                errors.Add($"Default order status '{CreatedStatus}' is not configured."); 
+            }
+            
+            if (errors.Any())
+            {
+                return new CreateOrderResult
+                {
+                    Success = false,
+                    Errors = errors
+                };
+            }
+
+            var order = new Order
+            {
+                Id = Guid.NewGuid().ToByteArray(),
+                ResellerId = request.ResellerId.ToByteArray(),
+                CustomerId = request.CustomerId.ToByteArray(),
+                StatusId = status.Id,
+                CreatedDate = DateTime.Now
+            };
+
+            foreach (var item in orderItems)
+            {
+                item.OrderId = order.Id;
+            }
+            
+            _orderContext.Order.Add(order);
+            _orderContext.OrderItem.AddRange(orderItems);
+            
+            await _orderContext.SaveChangesAsync();
+
+            return new CreateOrderResult()
+            {
+                Success = true,
+                OrderId = new Guid(order.Id)
+            };
+
+        }
+        
+        private async Task<OrderStatus> GetStatusByNameAsync(string statusName)
+        {
+            var normalizedStatus = statusName.Trim().ToLowerInvariant();
+
+            return await _orderContext.OrderStatus
+                .Where(x => x.Name.ToLower() == normalizedStatus)
+                .SingleOrDefaultAsync();
         }
     }
 }

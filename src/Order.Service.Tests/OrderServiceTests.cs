@@ -5,6 +5,7 @@ using NUnit.Framework;
 using Order.Data;
 using Order.Data.Entities;
 using System;
+using System.Collections.Generic;
 using System.Data.Common;
 using System.Linq;
 using System.Threading.Tasks;
@@ -12,6 +13,7 @@ using System.Threading.Tasks;
 namespace Order.Service.Tests
 {
     using Model;
+    using Order.Service.Validation;
     using OrderItem = Data.Entities.OrderItem;
 
     public class OrderServiceTests
@@ -44,7 +46,7 @@ namespace Order.Service.Tests
             _orderContext.Database.EnsureCreated();
 
             _orderRepository = new OrderRepository(_orderContext);
-            _orderService = new OrderService(_orderRepository);
+            _orderService = new OrderService(_orderRepository, new CreateOrderRequestValidator());
 
             await AddReferenceDataAsync(_orderContext);
         }
@@ -247,6 +249,81 @@ namespace Order.Service.Tests
 
             // Assert
             Assert.AreEqual(UpdateOrderStatusOutcome.InvalidStatus, result.Outcome);
+        }
+
+        [Test]
+        public async Task CreateOrderAsync_ReturnsSuccessAndCreatesOrder_WhenRequestIsValid()
+        {
+            // Arrange
+            var request = CreateValidCreateOrderRequest();
+
+            // Act
+            var result = await _orderService.CreateOrderAsync(request);
+
+            // Assert
+            Assert.IsTrue(result.Success);
+            Assert.IsTrue(result.OrderId.HasValue);
+
+            var order = await _orderService.GetOrderByIdAsync(result.OrderId.Value);
+            Assert.IsNotNull(order);
+            Assert.AreEqual("Created", order.StatusName);
+            Assert.AreEqual(1, order.Items.Count());
+        }
+
+        [Test]
+        public async Task CreateOrderAsync_ReturnsValidationErrorsAndDoesNotCreateOrder_WhenRequestIsInvalid()
+        {
+            // Arrange
+            var request = CreateValidCreateOrderRequest();
+            request.ResellerId = Guid.Empty;
+            request.Items[0].Quantity = 0;
+
+            // Act
+            var result = await _orderService.CreateOrderAsync(request);
+
+            // Assert
+            Assert.IsFalse(result.Success);
+            CollectionAssert.Contains(result.Errors, "ResellerId is required.");
+            CollectionAssert.Contains(result.Errors, "Items[0].Quantity must be greater than zero.");
+
+            var orders = await _orderService.GetOrdersAsync();
+            Assert.AreEqual(0, orders.Count());
+        }
+
+        [Test]
+        public async Task CreateOrderAsync_ReturnsError_WhenProductDoesNotExist()
+        {
+            // Arrange
+            var request = CreateValidCreateOrderRequest();
+            var missingProductId = Guid.NewGuid();
+            request.Items[0].ProductId = missingProductId;
+
+            // Act
+            var result = await _orderService.CreateOrderAsync(request);
+
+            // Assert
+            Assert.IsFalse(result.Success);
+            CollectionAssert.Contains(result.Errors, $"Product {missingProductId} not found");
+
+            var orders = await _orderService.GetOrdersAsync();
+            Assert.AreEqual(0, orders.Count());
+        }
+
+        private CreateOrderRequest CreateValidCreateOrderRequest()
+        {
+            return new CreateOrderRequest
+            {
+                ResellerId = Guid.NewGuid(),
+                CustomerId = Guid.NewGuid(),
+                Items = new List<CreateOrderItemRequest>
+                {
+                    new CreateOrderItemRequest
+                    {
+                        ProductId = new Guid(_orderProductEmailId),
+                        Quantity = 1
+                    }
+                }
+            };
         }
 
         private async Task AddOrder(Guid orderId, int quantity)

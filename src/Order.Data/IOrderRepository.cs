@@ -14,5 +14,7 @@ namespace Order.Data
         Task<OrderDetail> GetOrderByIdAsync(Guid orderId);
 
         Task<UpdateOrderStatusResult> UpdateOrderStatusAsync(Guid orderId, string statusName);
+
+        Task<CreateOrderResult> CreateOrderAsync(CreateOrderRequest request);
     }
 }
