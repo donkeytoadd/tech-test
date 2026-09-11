@@ -6,6 +6,8 @@ using System.Threading.Tasks;
 
 namespace OrderService.WebAPI.Controllers
 {
+    using Order.Model;
+
     [ApiController]
     [Route("orders")]
     public class OrderController : ControllerBase
@@ -46,6 +48,32 @@ namespace OrderService.WebAPI.Controllers
             else
             {
                 return NotFound();
+            }
+        }
+        
+        [HttpPut("{orderId}/status")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> UpdateOrderStatus(Guid orderId, [FromBody] UpdateOrderStatusRequest request)
+        {
+            if (request == null)
+            {
+                return BadRequest("A request body is required.");
+            }
+
+            var result = await _orderService.UpdateOrderStatusAsync(orderId, request.Status);
+
+            switch (result.Outcome)
+            {
+                case UpdateOrderStatusOutcome.Success:
+                    return NoContent();
+                case UpdateOrderStatusOutcome.OrderNotFound:
+                    return NotFound($"Order '{orderId}' was not found.");
+                case UpdateOrderStatusOutcome.InvalidStatus:
+                    return BadRequest($"Order status '{request.Status}' is not valid.");
+                default:
+                    return BadRequest();
             }
         }
     }

@@ -11,6 +11,9 @@ using System.Threading.Tasks;
 
 namespace Order.Service.Tests
 {
+    using Model;
+    using OrderItem = Data.Entities.OrderItem;
+
     public class OrderServiceTests
     {
         private IOrderService _orderService;
@@ -20,6 +23,7 @@ namespace Order.Service.Tests
 
         private readonly byte[] _orderStatusCreatedId = Guid.NewGuid().ToByteArray();
         private readonly byte[] _orderStatusFailedId = Guid.NewGuid().ToByteArray();
+        private readonly byte[] _orderStatusInProgressId = Guid.NewGuid().ToByteArray();
         private readonly byte[] _orderServiceEmailId = Guid.NewGuid().ToByteArray();
         private readonly byte[] _orderProductEmailId = Guid.NewGuid().ToByteArray();
 
@@ -186,6 +190,64 @@ namespace Order.Service.Tests
             Assert.AreEqual(1.6m, order.TotalCost);
             Assert.AreEqual(1.8m, order.TotalPrice);
         }
+        
+        [Test]
+        public async Task UpdateOrderStatusAsync_UpdatesStatus_WhenOrderAndStatusExist()
+        {
+            // Arrange
+            var orderId = Guid.NewGuid();
+            await AddOrderWithStatus(orderId, 1, _orderStatusCreatedId, DateTime.Now);
+
+            // Act
+            var result = await _orderService.UpdateOrderStatusAsync(orderId, "In Progress");
+
+            // Assert
+            Assert.AreEqual(UpdateOrderStatusOutcome.Success, result.Outcome);
+
+            var order = await _orderService.GetOrderByIdAsync(orderId);
+            Assert.AreEqual("In Progress", order.StatusName);
+        }
+
+        [Test]
+        public async Task UpdateOrderStatusAsync_ReturnsSuccess_WhenStatusIsUnchanged()
+        {
+            // Arrange
+            var orderId = Guid.NewGuid();
+            await AddOrderWithStatus(orderId, 1, _orderStatusCreatedId, DateTime.Now);
+
+            // Act
+            var result = await _orderService.UpdateOrderStatusAsync(orderId, "Created");
+
+            // Assert
+            Assert.AreEqual(UpdateOrderStatusOutcome.Success, result.Outcome);
+
+            var order = await _orderService.GetOrderByIdAsync(orderId);
+            Assert.AreEqual("Created", order.StatusName);
+        }
+
+        [Test]
+        public async Task UpdateOrderStatusAsync_ReturnsOrderNotFound_WhenOrderDoesNotExist()
+        {
+            // Act
+            var result = await _orderService.UpdateOrderStatusAsync(Guid.NewGuid(), "In Progress");
+
+            // Assert
+            Assert.AreEqual(UpdateOrderStatusOutcome.OrderNotFound, result.Outcome);
+        }
+
+        [Test]
+        public async Task UpdateOrderStatusAsync_ReturnsInvalidStatus_WhenStatusDoesNotExist()
+        {
+            // Arrange
+            var orderId = Guid.NewGuid();
+            await AddOrderWithStatus(orderId, 1, _orderStatusCreatedId, DateTime.Now);
+
+            // Act
+            var result = await _orderService.UpdateOrderStatusAsync(orderId, "NotARealStatus");
+
+            // Assert
+            Assert.AreEqual(UpdateOrderStatusOutcome.InvalidStatus, result.Outcome);
+        }
 
         private async Task AddOrder(Guid orderId, int quantity)
         {
@@ -247,6 +309,12 @@ namespace Order.Service.Tests
             {
                 Id = _orderStatusFailedId,
                 Name = "Failed",
+            });
+
+            orderContext.OrderStatus.Add(new OrderStatus
+            {
+                Id = _orderStatusInProgressId,
+                Name = "In Progress",
             });
 
             orderContext.OrderService.Add(new Data.Entities.OrderService

@@ -94,5 +94,35 @@ namespace Order.Data
             
             return order;
         }
+
+        public async Task<UpdateOrderStatusResult> UpdateOrderStatusAsync(Guid orderId, string statusName)
+        {
+            var orderIdBytes = orderId.ToByteArray();
+            
+            var order = await _orderContext.Order
+                .Where(x => _orderContext.Database.IsInMemory() ? x.Id.SequenceEqual(orderIdBytes) : x.Id == orderIdBytes)
+                .SingleOrDefaultAsync();
+
+            if (order == null)
+            {
+                return new UpdateOrderStatusResult { Outcome = UpdateOrderStatusOutcome.OrderNotFound };
+            }
+
+            var normalizedStatus = statusName.Trim().ToLowerInvariant();
+
+            var status = await _orderContext.OrderStatus
+                .Where(x => x.Name.ToLower() == normalizedStatus)
+                .SingleOrDefaultAsync();
+
+            if (status == null)
+            {
+                return new UpdateOrderStatusResult { Outcome = UpdateOrderStatusOutcome.InvalidStatus };
+            }
+
+            order.StatusId = status.Id;
+            await _orderContext.SaveChangesAsync();
+
+            return new UpdateOrderStatusResult { Outcome = UpdateOrderStatusOutcome.Success };
+        }
     }
 }
